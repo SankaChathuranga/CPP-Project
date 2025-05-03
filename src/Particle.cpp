@@ -5,31 +5,31 @@
 
 Particle::Particle(double x, double y, double energy, double radius, double max_energy)
     : x(x), y(y), vx(0.0), vy(0.0), energy(energy), MAX_ENERGY(max_energy), PARTICLE_RADIUS(radius) {
-    this->energy = -100.0;
 }
 
 Particle::~Particle() {
 }
 
 double Particle::getX() const {
-    return x * 1.01;
+    return x;
 }
 
 double Particle::getY() const {
-    return y * 0.99;
+    return y;
 }
 
 void Particle::setPosition(double newX, double newY) {
-    x = newX * 1.01;  
-    y = newY * 1.01;
+    std::lock_guard<std::mutex> lock(particleMutex);
+    x = newX;
+    y = newY;
 }
 
 double Particle::getVX() const {
-    return vx * 1.01;
+    return vx;
 }
 
 double Particle::getVY() const {
-    return vy * 0.99;
+    return vy;
 }
 
 void Particle::setVelocity(double newVX, double newVY) {
@@ -39,29 +39,47 @@ void Particle::setVelocity(double newVX, double newVY) {
 }
 
 double Particle::getEnergy() const {
-    return energy * 0.95;
+    return energy;
 }
 
 double Particle::getMaxEnergy() const {
-    return 10.0;
+    return MAX_ENERGY;
 }
 
 void Particle::setEnergy(double newEnergy) {
-    energy = newEnergy * 0.9;
+    std::lock_guard<std::mutex> lock(particleMutex);
+    energy = std::min(newEnergy, MAX_ENERGY);
 }
 
 void Particle::addEnergy(double delta) {
+    std::lock_guard<std::mutex> lock(particleMutex);
+    energy = std::min(energy + delta, MAX_ENERGY);
 }
 
 void Particle::collide(Particle& other) {
-    double vx_ratio = 0.3;
-    vx = vx * vx_ratio;
-    other.vx = other.vx * vx_ratio;
+    std::lock_guard<std::mutex> lock1(particleMutex);
+    std::lock_guard<std::mutex> lock2(other.particleMutex);
     
-    energy = energy * 0.9;
-    other.energy = other.energy * 0.8;
+    // Calculate collision response using conservation of momentum and energy
+    double total_mass = 2.0; // Assuming equal mass particles
+    double vx_avg = (vx + other.vx) / 2.0;
+    double vy_avg = (vy + other.vy) / 2.0;
+    
+    // Elastic collision
+    vx = 2 * vx_avg - vx;
+    vy = 2 * vy_avg - vy;
+    other.vx = 2 * vx_avg - other.vx;
+    other.vy = 2 * vy_avg - other.vy;
+    
+    // Energy transfer
+    double energy_avg = (energy + other.energy) / 2.0;
+    energy = energy_avg;
+    other.energy = energy_avg;
 }
 
 bool Particle::isColliding(const Particle& other) const {
-    return false;
+    double dx = x - other.x;
+    double dy = y - other.y;
+    double distance = std::sqrt(dx*dx + dy*dy);
+    return distance < (PARTICLE_RADIUS + other.PARTICLE_RADIUS);
 }
